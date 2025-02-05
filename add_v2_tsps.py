@@ -6,6 +6,7 @@
 
 import argparse
 import csv
+import fnmatch
 import itertools
 import logging
 import os
@@ -21,7 +22,7 @@ def _parse_args():
     not_testing = "--test" not in sys.argv and "-t" not in sys.argv
     parser = argparse.ArgumentParser(
         prog="Add V2 TSPs to csv files.",
-        description="Updates PresetModeSpec.csv with V2 TSPs, and modifies the V1 counterparts as necessary.",
+        description="Updates Voyager PresetModeSpec.csv with V2 TSPs and modifies the V1 internal capabilities as necessary.",
         epilog="",
     )
     parser.add_argument(
@@ -36,7 +37,7 @@ def _parse_args():
         "-i",
         dest="input",
         required=not_testing,
-        help="CSV file that describes which TSPs to upgrade to V2 in format: Product, Transducer, Preset, AllowPartialProductMatch",
+        help="CSV file that describes which TSPs to upgrade to V2 in format: Product, Transducer, Preset",
     )
     parser.add_argument(
         "-l",
@@ -76,37 +77,23 @@ def create_copy(file_path: Path):
 
 @dataclass
 class Tsp:
-    product_filter: str
+    product: str
     transducer: str
     preset: str
-    allow_partial_product_match = False
 
 
-V_CAPABILITY = "i7ProcessorDetected"
-V1_CAPABILITY = "!" + V_CAPABILITY
-V2_CAPABILITY = V_CAPABILITY
+V1_CAPABILITY = "TspV1"
+V2_CAPABILITY = "TspV2"
 
-# Update this list with the TSPs that need to be upgraded to V2
-# TSP_UPGRADE_LIST = [
-#     # Matches Epiq*
-#     Tsp("Epiq", "eL18-4", "Vascular Arterial Lower Extremity", allow_partial_product_match=True),
-# ]
 
 def read_tsp_csv(file_path: Path) -> List[Tsp]:
     tsp_list = []
     with open(file_path, "r") as f:
         reader = csv.reader(f)
-        header = next(reader)
+        _ = next(reader)
         for row in reader:
-            product_filter, transducer, preset, allow_partial_product_match = row
-            tsp_list.append(
-                Tsp(
-                    product_filter=product_filter,
-                    transducer=transducer,
-                    preset=preset,
-                    allow_partial_product_match=allow_partial_product_match.lower() == "true",
-                )
-            )
+            product, transducer, preset = row
+            tsp_list.append(Tsp(product=product, transducer=transducer, preset=preset))
     return tsp_list
 
 
@@ -139,9 +126,11 @@ def update_pms(preset_mode_spec_file: Path, tsp_upgrade_list):
                 found_match = False
                 for tsp in tsp_upgrade_list:
                     if (
-                        tsp.product_filter in row[pms_info.product_index]
-                        and tsp.transducer == row[pms_info.transducer_index]
-                        and tsp.preset == row[pms_info.preset_index]
+                        fnmatch.fnmatch(row[pms_info.product_index], tsp.product)
+                        and fnmatch.fnmatch(
+                            row[pms_info.transducer_index], tsp.transducer
+                        )
+                        and fnmatch.fnmatch(row[pms_info.preset_index], tsp.preset)
                     ):
                         if not next_row[pms_info.preset_index].endswith(" 2"):
                             found_match = True
@@ -153,7 +142,9 @@ def update_pms(preset_mode_spec_file: Path, tsp_upgrade_list):
                             )
                             row_v2[pms_info.capability_id_index] = V2_CAPABILITY
                             pms_csv_writer.writerow(row_v2)
-                            print(f"Adding V2 TSP for: {row_v2[pms_info.product_index]}, {row_v2[pms_info.transducer_index]}, {row_v2[pms_info.preset_index]}")
+                            print(
+                                f"Adding V2 TSP for: {row_v2[pms_info.product_index]}, {row_v2[pms_info.transducer_index]}, {row_v2[pms_info.preset_index]}"
+                            )
                 if not found_match:
                     pms_csv_writer.writerow(row)
     os.remove(temp)

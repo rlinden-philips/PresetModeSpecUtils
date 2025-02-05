@@ -1,2 +1,3 @@
-Product,Transducer,Preset,AllowPartialProductMatch
-Epiq,eL18-4,Vascular Arterial Lower Extremity,true
+Product,Transducer,Preset
+Epiq*,eL18-4,Vascular Arterial Lower Extremity
+EpiqEliteAdvG,C5-1,Abdomen General
